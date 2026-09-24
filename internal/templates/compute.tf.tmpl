@@ -1,0 +1,116 @@
+{{ range .Services }}
+# ------------------------------------------------------------------------------
+# Cloud Run Service: {{ .Name }}
+# ------------------------------------------------------------------------------
+
+# Dedicated Service Account for {{ .Name }} (Principle of Least Privilege / Zero Trust)
+resource "google_service_account" "{{ .Name }}_sa" {
+  account_id   = "{{ $.ProjectName }}-{{ .Name }}-sa"
+  display_name = "Execution Service Account for {{ .Name }}"
+  description  = "Least privilege identity for Cloud Run service {{ .Name }}"
+}
+
+{{ if $.IncludeFirestore }}
+# Minimum privilege for Firestore (Datastore User instead of primitive roles)
+resource "google_project_iam_member" "{{ .Name }}_firestore_user" {
+  project = var.gcp_project_id
+  role    = "roles/datastore.user"
+  member  = "serviceAccount:${google_service_account.{{ .Name }}_sa.email}"
+}
+{{ end }}
+
+{{ if $.IncludeStorage }}
+# Minimum privilege for Storage (Object User limited to application bucket)
+resource "google_storage_bucket_iam_member" "{{ .Name }}_storage_user" {
+  bucket = google_storage_bucket.app_storage.name
+  role   = "roles/storage.objectUser"
+  member = "serviceAccount:${google_service_account.{{ .Name }}_sa.email}"
+}
+{{ end }}
+
+{{ if $.IncludeSecrets }}
+# Minimum privilege to read application secret
+resource "google_secret_manager_secret_iam_member" "{{ .Name }}_secret_accessor" {
+  secret_id = google_secret_manager_secret.app_secret.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.{{ .Name }}_sa.email}"
+}
+{{ end }}
+
+resource "google_cloud_run_v2_service" "{{ .Name }}" {
+  name     = "{{ $.ProjectName }}-{{ .Name }}"
+  location = var.gcp_region
+{{ if .IsPublic }}
+  ingress = "INGRESS_TRAFFIC_ALL"
+{{ else }}
+  # Attack surface reduction: internal traffic and Cloud Load Balancing only
+  ingress = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
+{{ end }}
+
+  template {
+    # Explicit assignment of dedicated Service Account (avoids default SA with roles/editor)
+    service_account = google_service_account.{{ .Name }}_sa.email
+
+    containers {
+      image = "gcr.io/${var.gcp_project_id}/{{ .Name }}:latest"
+
+      resources {
+        limits = {
+          memory = "{{ .Memory }}"
+          cpu    = "{{ .CPU }}"
+        }
+      }
+    }
+
+    # $0/month guarantee: Scale to zero when idle
+    scaling {
+      min_instance_count = 0
+      max_instance_count = 5
+    }
+  }
+}
+
+{{ if .IsPublic }}
+# Public Access for {{ .Name }} (Internet-facing API)
+resource "google_cloud_run_v2_service_iam_member" "{{ .Name }}_public" {
+  name     = google_cloud_run_v2_service.{{ .Name }}.name
+  location = google_cloud_run_v2_service.{{ .Name }}.location
+  role     = "roles/run.invoker"
+  member   = "allUsers"
+}
+{{ end }}
+
+{{ if .EnablePubSub }}
+# ------------------------------------------------------------------------------
+# Pub/Sub Integration for {{ .Name }}
+# ------------------------------------------------------------------------------
+resource "google_pubsub_topic" "{{ .Name }}_topic" {
+  name = "{{ $.ProjectName }}-{{ .Name }}-events"
+}
+
+resource "google_service_account" "{{ .Name }}_pubsub_invoker" {
+  account_id   = "pubsub-invoker-{{ .Name }}"
+  display_name = "PubSub Invoker for {{ .Name }}"
+}
+
+resource "google_cloud_run_v2_service_iam_member" "{{ .Name }}_pubsub_perm" {
+  name     = google_cloud_run_v2_service.{{ .Name }}.name
+  location = google_cloud_run_v2_service.{{ .Name }}.location
+  role     = "roles/run.invoker"
+  member   = "serviceAccount:${google_service_account.{{ .Name }}_pubsub_invoker.email}"
+}
+
+resource "google_pubsub_subscription" "{{ .Name }}_sub" {
+  name  = "{{ $.ProjectName }}-{{ .Name }}-sub"
+  topic = google_pubsub_topic.{{ .Name }}_topic.name
+
+  push_config {
+    push_endpoint = "${google_cloud_run_v2_service.{{ .Name }}.uri}/events"
+
+    oidc_token {
+      service_account_email = google_service_account.{{ .Name }}_pubsub_invoker.email
+    }
+  }
+}
+{{ end }}
+{{ end }}

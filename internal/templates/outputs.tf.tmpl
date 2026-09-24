@@ -1,0 +1,54 @@
+output "project_id" {
+  description = "Google Cloud Platform Project ID"
+  value       = var.gcp_project_id
+}
+
+output "region" {
+  description = "Primary deployment region in Google Cloud Platform"
+  value       = var.gcp_region
+}
+
+{{ range .Services }}
+output "cloud_run_{{ .Name }}_uri" {
+  description = "Public or internal URL of the Cloud Run microservice {{ .Name }}"
+  value       = google_cloud_run_v2_service.{{ .Name }}.uri
+}
+
+output "cloud_run_{{ .Name }}_service_account" {
+  description = "Dedicated Service Account email for {{ .Name }}"
+  value       = google_service_account.{{ .Name }}_sa.email
+}
+
+{{ if .EnablePubSub }}
+output "pubsub_{{ .Name }}_topic" {
+  description = "Pub/Sub topic name for {{ .Name }} events"
+  value       = google_pubsub_topic.{{ .Name }}_topic.name
+}
+
+output "pubsub_{{ .Name }}_subscription" {
+  description = "Pub/Sub push subscription name for {{ .Name }}"
+  value       = google_pubsub_subscription.{{ .Name }}_sub.name
+}
+{{ end }}
+{{ end }}
+
+{{ if .IncludeStorage }}
+output "storage_bucket_name" {
+  description = "Private Cloud Storage bucket name"
+  value       = google_storage_bucket.app_storage.name
+}
+{{ end }}
+
+{{ if .IncludeFirestore }}
+output "firestore_database_name" {
+  description = "Firestore database name"
+  value       = google_firestore_database.database.name
+}
+{{ end }}
+
+{{ if .IncludeSecrets }}
+output "secret_manager_secret_id" {
+  description = "Secret Manager resource identifier (without exposing sensitive values)"
+  value       = google_secret_manager_secret.app_secret.secret_id
+}
+{{ end }}

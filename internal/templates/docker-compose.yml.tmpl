@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  firebase-emulators:
+    image: andreysenov/firebase-tools:latest
+    container_name: firebase-emulators
+    command: firebase emulators:start --config=/firebase.json --project=local-dev
+    environment:
+      - FIREBASE_LOG_DIR=/tmp
+      - GCP_PROJECT={{ .GCPProjectID }}
+    volumes:
+      - ./firebase.json:/firebase.json:z
+      - ./firestore.rules:/firestore.rules:z
+      - ./storage.rules:/storage.rules:z
+    ports:
+      - "4000:4000" # Firebase Emulator Suite UI
+      - "8080:8080" # Cloud Firestore Emulator
+      - "8085:8085" # Cloud Pub/Sub Emulator
+      - "9199:9199" # Cloud Storage Emulator
+{{- if or .IncludeAuth .EnableIdentityPlatform }}
+      - "9099:9099" # Identity Platform / Auth Emulator
+{{- end }}
+    networks:
+      - gcp-network
+
+networks:
+  gcp-network:
+    name: gcp-local-net
+    driver: bridge

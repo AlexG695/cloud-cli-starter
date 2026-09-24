@@ -1,0 +1,19 @@
+variable "gcp_project_id" {
+  description = "The Google Cloud Platform project ID"
+  type        = string
+  default     = "{{ .GCPProjectID }}"
+}
+
+variable "gcp_region" {
+  description = "The default region in GCP (Always Free Tier)"
+  type        = string
+  default     = "{{ .Region }}"
+}
+{{ if .IncludeCloudflare }}
+variable "cloudflare_api_token" {
+  description = "Cloudflare API token with DNS edit permissions"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+{{ end }}

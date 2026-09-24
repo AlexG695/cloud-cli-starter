@@ -1,0 +1,74 @@
+{{ if .IncludeStorage }}
+# ------------------------------------------------------------------------------
+# Storage Layer (Bucket with uniform access, public access prevention and encryption)
+# ------------------------------------------------------------------------------
+resource "google_storage_bucket" "app_storage" {
+  name                        = "{{ .ProjectName }}-storage-${var.gcp_project_id}"
+  location                    = var.gcp_region
+  uniform_bucket_level_access = true
+  public_access_prevention    = "enforced"
+  force_destroy               = false
+
+  versioning {
+    enabled = true
+  }
+
+  # Accidental destruction protection in production (Zero-Trust):
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+}
+{{ end }}
+
+{{ if .IncludeFirestore }}
+# ------------------------------------------------------------------------------
+# Database Layer (Firestore in Native Mode)
+# ------------------------------------------------------------------------------
+resource "google_firestore_database" "database" {
+  project                           = var.gcp_project_id
+  name                              = "(default)"
+  location_id                       = var.gcp_region
+  type                              = "FIRESTORE_NATIVE"
+  point_in_time_recovery_enablement = "POINT_IN_TIME_RECOVERY_ENABLED"
+  delete_protection_state           = "DELETE_PROTECTION_DISABLED" # In production change to DELETE_PROTECTION_ENABLED
+
+  # Accidental destruction protection in production (Zero-Trust):
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+}
+{{ end }}
+
+{{ if .IncludeAuth }}
+# ------------------------------------------------------------------------------
+# Identity Platform / Firebase Auth
+# ------------------------------------------------------------------------------
+resource "google_identity_platform_config" "auth_config" {
+  project = var.gcp_project_id
+
+  sign_in {
+    email {
+      enabled           = true
+      password_required = true
+    }
+  }
+}
+{{ end }}
+
+{{ if .IncludeSecrets }}
+# ------------------------------------------------------------------------------
+# Secret Manager (Base secrets layer with automatic replication)
+# ------------------------------------------------------------------------------
+resource "google_secret_manager_secret" "app_secret" {
+  secret_id = "{{ .ProjectName }}-api-key"
+
+  replication {
+    auto {}
+  }
+
+  # Accidental destruction protection in production (Zero-Trust):
+  # lifecycle {
+  #   prevent_destroy = true
+  # }
+}
+{{ end }}

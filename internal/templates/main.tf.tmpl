@@ -1,0 +1,37 @@
+# ------------------------------------------------------------------------------
+# GCP APIs and Services Enablement (Google Cloud Project Services)
+# ------------------------------------------------------------------------------
+
+locals {
+  required_services = [
+    "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
+{{- if .HasServices }}
+    "run.googleapis.com",
+{{- end }}
+{{- if .HasPubSub }}
+    "pubsub.googleapis.com",
+{{- end }}
+{{- if .IncludeStorage }}
+    "storage.googleapis.com",
+{{- end }}
+{{- if .IncludeFirestore }}
+    "firestore.googleapis.com",
+{{- end }}
+{{- if .IncludeSecrets }}
+    "secretmanager.googleapis.com",
+{{- end }}
+{{- if or .IncludeAuth .EnableIdentityPlatform }}
+    "identitytoolkit.googleapis.com",
+{{- end }}
+  ]
+}
+
+resource "google_project_service" "gcp_services" {
+  for_each = toset(local.required_services)
+
+  project                    = var.gcp_project_id
+  service                    = each.key
+  disable_on_destroy         = false
+  disable_dependent_services = false
+}

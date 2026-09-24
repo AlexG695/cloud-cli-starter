@@ -1,0 +1,32 @@
+.PHONY: help init plan apply destroy fmt check
+{{ if .IncludeLocalEmulators }}
+.PHONY: emulators-up emulators-down
+{{ end }}
+
+help: ## Shows this help message
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+
+init: ## Initializes Terraform configuration
+	terraform init
+
+plan: ## Shows planned infrastructure changes
+	terraform plan
+
+apply: ## Applies infrastructure changes in GCP
+	terraform apply -auto-approve
+
+destroy: ## Destroys deployed infrastructure
+	terraform destroy
+
+fmt: ## Applies canonical formatting to Terraform files
+	terraform fmt -recursive
+
+check: fmt ## Validates Terraform syntax and coherence
+	terraform validate
+{{ if .IncludeLocalEmulators }}
+emulators-up: ## Starts local emulators using docker compose
+	docker compose up -d
+
+emulators-down: ## Stops local emulators
+	docker compose down
+{{ end }}
