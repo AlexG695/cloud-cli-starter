@@ -32,7 +32,6 @@ func TestGenerateProject(t *testing.T) {
 		IncludeAuth:            false,
 		EnableIdentityPlatform: false,
 		IncludeSecrets:         true,
-		IncludeCloudflare:      true,
 		IncludeLocalEmulators:  true,
 		EnableGemmaAssistant:   false,
 	}
@@ -222,5 +221,250 @@ func TestGenerateProject_WithIdentityPlatform(t *testing.T) {
 	mainContent, _ := os.ReadFile(filepath.Join(infraDir, "main.tf"))
 	if !strings.Contains(string(mainContent), "identitytoolkit.googleapis.com") {
 		t.Errorf("main.tf must enable identitytoolkit.googleapis.com when Identity Platform is active")
+	}
+}
+
+func TestGenerateProject_WithComputeEngine_Private(t *testing.T) {
+	tempDir := t.TempDir()
+	infraDir := filepath.Join(tempDir, "infra")
+
+	config := generator.ProjectConfig{
+		ProjectName:          "vm-private-app",
+		GCPProjectID:         "test-vm-123",
+		Region:               "us-central1",
+		IncludeComputeEngine: true,
+		VMPublicIP:           false,
+		IncludeStorage:       true,
+		IncludeFirestore:     true,
+		IncludeSecrets:       true,
+	}
+
+	err := generator.GenerateProject(config, infraDir)
+	if err != nil {
+		t.Fatalf("GenerateProject failed: %v", err)
+	}
+
+	mainContent, _ := os.ReadFile(filepath.Join(infraDir, "main.tf"))
+	if !strings.Contains(string(mainContent), "compute.googleapis.com") {
+		t.Errorf("main.tf must enable compute.googleapis.com when Compute Engine is active")
+	}
+
+	variablesContent, _ := os.ReadFile(filepath.Join(infraDir, "variables.tf"))
+	if !strings.Contains(string(variablesContent), "variable \"gcp_zone\"") {
+		t.Errorf("variables.tf must define gcp_zone when Compute Engine is active")
+	}
+
+	computeContent, _ := os.ReadFile(filepath.Join(infraDir, "compute.tf"))
+	if !strings.Contains(string(computeContent), "resource \"google_compute_instance\" \"vm_instance\"") {
+		t.Errorf("compute.tf must define vm_instance")
+	}
+	if !strings.Contains(string(computeContent), "machine_type = \"e2-micro\"") {
+		t.Errorf("compute.tf must enforce machine_type = e2-micro for Free Tier")
+	}
+	if !strings.Contains(string(computeContent), "type  = \"pd-standard\"") {
+		t.Errorf("compute.tf must enforce pd-standard disk type for Free Tier")
+	}
+	if !strings.Contains(string(computeContent), "size  = 30") {
+		t.Errorf("compute.tf must enforce disk size = 30 for Free Tier")
+	}
+	if !strings.Contains(string(computeContent), "image = \"debian-cloud/debian-12\"") {
+		t.Errorf("compute.tf must use standard Linux image debian-12")
+	}
+	if !strings.Contains(string(computeContent), "resource \"google_service_account\" \"vm_sa\"") {
+		t.Errorf("compute.tf must define dedicated Service Account vm_sa")
+	}
+	if strings.Contains(string(computeContent), "access_config") {
+		t.Errorf("compute.tf must NOT contain access_config when VMPublicIP is false")
+	}
+
+	outputsContent, _ := os.ReadFile(filepath.Join(infraDir, "outputs.tf"))
+	if !strings.Contains(string(outputsContent), "output \"vm_instance_name\"") {
+		t.Errorf("outputs.tf must export vm_instance_name")
+	}
+	if !strings.Contains(string(outputsContent), "output \"vm_private_ip\"") {
+		t.Errorf("outputs.tf must export vm_private_ip when VMPublicIP is false")
+	}
+	if strings.Contains(string(outputsContent), "output \"vm_public_ip\"") {
+		t.Errorf("outputs.tf must NOT export vm_public_ip when VMPublicIP is false")
+	}
+
+	// Validate canonical Terraform formatting
+	diffCmd := exec.Command("terraform", "fmt", "-diff", infraDir)
+	if out, err := diffCmd.CombinedOutput(); err != nil || len(out) > 0 {
+		t.Errorf("terraform fmt failed on private VM generated files:\n%s", string(out))
+	}
+}
+
+func TestGenerateProject_WithComputeEngine_Public(t *testing.T) {
+	tempDir := t.TempDir()
+	infraDir := filepath.Join(tempDir, "infra")
+
+	config := generator.ProjectConfig{
+		ProjectName:          "vm-public-app",
+		GCPProjectID:         "test-vm-456",
+		Region:               "us-central1",
+		IncludeComputeEngine: true,
+		VMPublicIP:           true,
+	}
+
+	err := generator.GenerateProject(config, infraDir)
+	if err != nil {
+		t.Fatalf("GenerateProject failed: %v", err)
+	}
+
+	computeContent, _ := os.ReadFile(filepath.Join(infraDir, "compute.tf"))
+	if !strings.Contains(string(computeContent), "access_config") {
+		t.Errorf("compute.tf must contain access_config when VMPublicIP is true")
+	}
+
+	outputsContent, _ := os.ReadFile(filepath.Join(infraDir, "outputs.tf"))
+	if !strings.Contains(string(outputsContent), "output \"vm_public_ip\"") {
+		t.Errorf("outputs.tf must export vm_public_ip when VMPublicIP is true")
+	}
+	if strings.Contains(string(outputsContent), "output \"vm_private_ip\"") {
+		t.Errorf("outputs.tf must NOT export vm_private_ip when VMPublicIP is true")
+	}
+
+	// Validate canonical Terraform formatting
+	diffCmd := exec.Command("terraform", "fmt", "-diff", infraDir)
+	if out, err := diffCmd.CombinedOutput(); err != nil || len(out) > 0 {
+		t.Errorf("terraform fmt failed on public VM generated files:\n%s", string(out))
+	}
+}
+
+func TestGenerateProject_WithBigQuery(t *testing.T) {
+	tempDir := t.TempDir()
+	infraDir := filepath.Join(tempDir, "infra")
+
+	config := generator.ProjectConfig{
+		ProjectName:     "bq-test-app",
+		GCPProjectID:    "test-bq-123",
+		Region:          "us-central1",
+		IncludeBigQuery: true,
+	}
+
+	err := generator.GenerateProject(config, infraDir)
+	if err != nil {
+		t.Fatalf("GenerateProject failed: %v", err)
+	}
+
+	mainContent, _ := os.ReadFile(filepath.Join(infraDir, "main.tf"))
+	if !strings.Contains(string(mainContent), "bigquery.googleapis.com") {
+		t.Errorf("main.tf must enable bigquery.googleapis.com when BigQuery is active")
+	}
+
+	modulesContent, _ := os.ReadFile(filepath.Join(infraDir, "modules.tf"))
+	if !strings.Contains(string(modulesContent), "resource \"google_bigquery_dataset\" \"analytics_dataset\"") {
+		t.Errorf("modules.tf must define analytics_dataset")
+	}
+	if !strings.Contains(string(modulesContent), "default_table_expiration_ms = 5184000000") {
+		t.Errorf("modules.tf must cap table expiration to 60 days to prevent exceeding 10GB")
+	}
+	if !strings.Contains(string(modulesContent), "time_partitioning") {
+		t.Errorf("modules.tf must configure time_partitioning for BigQuery events table")
+	}
+
+	outputsContent, _ := os.ReadFile(filepath.Join(infraDir, "outputs.tf"))
+	if !strings.Contains(string(outputsContent), "output \"bigquery_dataset_id\"") {
+		t.Errorf("outputs.tf must export bigquery_dataset_id")
+	}
+	if !strings.Contains(string(outputsContent), "output \"bigquery_events_table_id\"") {
+		t.Errorf("outputs.tf must export bigquery_events_table_id")
+	}
+
+	// Validate canonical Terraform formatting
+	diffCmd := exec.Command("terraform", "fmt", "-diff", infraDir)
+	if out, err := diffCmd.CombinedOutput(); err != nil || len(out) > 0 {
+		t.Errorf("terraform fmt failed on BigQuery generated files:\n%s", string(out))
+	}
+}
+
+func TestGenerateProject_WithCloudFunctions(t *testing.T) {
+	tempDir := t.TempDir()
+	infraDir := filepath.Join(tempDir, "infra")
+
+	config := generator.ProjectConfig{
+		ProjectName:           "fn-test-app",
+		GCPProjectID:          "test-fn-123",
+		Region:                "us-central1",
+		IncludeCloudFunctions: true,
+	}
+
+	err := generator.GenerateProject(config, infraDir)
+	if err != nil {
+		t.Fatalf("GenerateProject failed: %v", err)
+	}
+
+	mainContent, _ := os.ReadFile(filepath.Join(infraDir, "main.tf"))
+	if !strings.Contains(string(mainContent), "cloudfunctions.googleapis.com") {
+		t.Errorf("main.tf must enable cloudfunctions.googleapis.com")
+	}
+	if !strings.Contains(string(mainContent), "cloudbuild.googleapis.com") {
+		t.Errorf("main.tf must enable cloudbuild.googleapis.com")
+	}
+
+	providersContent, _ := os.ReadFile(filepath.Join(infraDir, "providers.tf"))
+	if !strings.Contains(string(providersContent), "archive = {") {
+		t.Errorf("providers.tf must declare archive provider when Cloud Functions is active")
+	}
+
+	computeContent, _ := os.ReadFile(filepath.Join(infraDir, "compute.tf"))
+	if !strings.Contains(string(computeContent), "resource \"google_cloudfunctions2_function\" \"app_function\"") {
+		t.Errorf("compute.tf must define app_function")
+	}
+	if !strings.Contains(string(computeContent), "min_instance_count = 0") {
+		t.Errorf("compute.tf must enforce min_instance_count = 0 (scale to zero)")
+	}
+	if !strings.Contains(string(computeContent), "available_memory   = \"256M\"") {
+		t.Errorf("compute.tf must configure 256M available memory for Free Tier")
+	}
+	if !strings.Contains(string(computeContent), "age = 7") {
+		t.Errorf("compute.tf must configure 7-day lifecycle purge rule on deployment bucket")
+	}
+
+	outputsContent, _ := os.ReadFile(filepath.Join(infraDir, "outputs.tf"))
+	if !strings.Contains(string(outputsContent), "output \"cloud_function_name\"") {
+		t.Errorf("outputs.tf must export cloud_function_name")
+	}
+	if !strings.Contains(string(outputsContent), "output \"cloud_function_uri\"") {
+		t.Errorf("outputs.tf must export cloud_function_uri")
+	}
+
+	// Validate canonical Terraform formatting
+	diffCmd := exec.Command("terraform", "fmt", "-diff", infraDir)
+	if out, err := diffCmd.CombinedOutput(); err != nil || len(out) > 0 {
+		t.Errorf("terraform fmt failed on Cloud Functions generated files:\n%s", string(out))
+	}
+}
+
+func TestGenerateProject_WithVMIdleShutdown(t *testing.T) {
+	tempDir := t.TempDir()
+	infraDir := filepath.Join(tempDir, "infra")
+
+	config := generator.ProjectConfig{
+		ProjectName:          "vm-idle-app",
+		GCPProjectID:         "test-idle-123",
+		Region:               "us-central1",
+		IncludeComputeEngine: true,
+		VMIdleShutdown:       true,
+	}
+
+	err := generator.GenerateProject(config, infraDir)
+	if err != nil {
+		t.Fatalf("GenerateProject failed: %v", err)
+	}
+
+	computeContent, _ := os.ReadFile(filepath.Join(infraDir, "compute.tf"))
+	if !strings.Contains(string(computeContent), "metadata_startup_script") {
+		t.Errorf("compute.tf must inject metadata_startup_script when VMIdleShutdown is true")
+	}
+	if !strings.Contains(string(computeContent), "idle-shutdown.sh") {
+		t.Errorf("compute.tf must include idle-shutdown.sh watchdog script")
+	}
+
+	// Validate canonical Terraform formatting
+	diffCmd := exec.Command("terraform", "fmt", "-diff", infraDir)
+	if out, err := diffCmd.CombinedOutput(); err != nil || len(out) > 0 {
+		t.Errorf("terraform fmt failed on VM with Idle Shutdown generated files:\n%s", string(out))
 	}
 }

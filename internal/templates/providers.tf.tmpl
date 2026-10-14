@@ -5,10 +5,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
-{{- if .IncludeCloudflare }}
-    cloudflare = {
-      source  = "cloudflare/cloudflare"
-      version = "~> 4.0"
+{{- if .IncludeCloudFunctions }}
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.0"
     }
 {{- end }}
   }
@@ -18,9 +18,3 @@ provider "google" {
   project = var.gcp_project_id
   region  = var.gcp_region
 }
-
-{{ if .IncludeCloudflare }}
-provider "cloudflare" {
-  api_token = var.cloudflare_api_token
-}
-{{ end }}

@@ -9,11 +9,10 @@ variable "gcp_region" {
   type        = string
   default     = "{{ .Region }}"
 }
-{{ if .IncludeCloudflare }}
-variable "cloudflare_api_token" {
-  description = "Cloudflare API token with DNS edit permissions"
+{{ if .IncludeComputeEngine }}
+variable "gcp_zone" {
+  description = "The zone in GCP for Compute Engine (Always Free Tier: us-central1, us-east1, us-west1)"
   type        = string
-  sensitive   = true
-  default     = ""
+  default     = "{{ .Region }}-b"
 }
 {{ end }}

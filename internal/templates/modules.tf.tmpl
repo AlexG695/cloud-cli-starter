@@ -72,3 +72,51 @@ resource "google_secret_manager_secret" "app_secret" {
   # }
 }
 {{ end }}
+
+{{ if .IncludeBigQuery }}
+# ------------------------------------------------------------------------------
+# BigQuery Analytics Layer (Always Free: 10 GB storage + 1 TB queries/month)
+# ------------------------------------------------------------------------------
+resource "google_bigquery_dataset" "analytics_dataset" {
+  dataset_id                  = replace("{{ .ProjectName }}_analytics", "-", "_")
+  friendly_name               = "{{ .ProjectName }} Analytics"
+  description                 = "Free Tier analytics dataset with automatic 60-day table expiration"
+  location                    = var.gcp_region
+  default_table_expiration_ms = 5184000000 # 60 days in milliseconds (caps storage under 10GB)
+
+  labels = {
+    environment = "production"
+    managed_by  = "terraform"
+  }
+}
+
+resource "google_bigquery_table" "events_table" {
+  dataset_id          = google_bigquery_dataset.analytics_dataset.dataset_id
+  table_id            = "events"
+  description         = "Partitioned event log table to minimize query data scanned (Free Tier: 1 TB/mo)"
+  deletion_protection = false
+
+  time_partitioning {
+    type          = "DAY"
+    expiration_ms = 5184000000 # 60 days
+  }
+
+  schema = jsonencode([
+    {
+      name = "timestamp"
+      type = "TIMESTAMP"
+      mode = "REQUIRED"
+    },
+    {
+      name = "event_name"
+      type = "STRING"
+      mode = "REQUIRED"
+    },
+    {
+      name = "payload"
+      type = "STRING"
+      mode = "NULLABLE"
+    }
+  ])
+}
+{{ end }}

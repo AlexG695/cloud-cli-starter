@@ -13,7 +13,9 @@ const (
 	optStorage        = "IncludeStorage (Private Cloud Storage bucket)"
 	optFirestore      = "IncludeFirestore (Cloud Firestore NoSQL database)"
 	optAuth           = "IncludeAuth (Identity Platform / Firebase Auth)"
-	optCloudflare     = "IncludeCloudflare (Cloudflare DNS, SSL & Proxy)"
+	optComputeEngine  = "IncludeComputeEngine (Compute Engine e2-micro VM, 30GB pd-standard)"
+	optBigQuery       = "IncludeBigQuery (BigQuery dataset with 10GB capped retention)"
+	optFunctions      = "IncludeCloudFunctions (Cloud Functions v2, scale-to-zero serverless)"
 	optLocalEmulators = "IncludeLocalEmulators (Local emulators with docker-compose.yml)"
 )
 
@@ -116,7 +118,9 @@ func RunPrompts() (*generator.ProjectConfig, error) {
 			optStorage,
 			optFirestore,
 			optAuth,
-			optCloudflare,
+			optComputeEngine,
+			optBigQuery,
+			optFunctions,
 			optLocalEmulators,
 		},
 		Default: []string{
@@ -137,16 +141,36 @@ func RunPrompts() (*generator.ProjectConfig, error) {
 	cfg.IncludeFirestore = selectedMap[optFirestore]
 	cfg.IncludeAuth = selectedMap[optAuth]
 	cfg.EnableIdentityPlatform = cfg.IncludeAuth
-	cfg.IncludeCloudflare = selectedMap[optCloudflare]
+	cfg.IncludeComputeEngine = selectedMap[optComputeEngine]
+	cfg.IncludeBigQuery = selectedMap[optBigQuery]
+	cfg.IncludeCloudFunctions = selectedMap[optFunctions]
 	cfg.IncludeLocalEmulators = selectedMap[optLocalEmulators]
 
-	// If Cloudflare was selected, optionally ask for domain
-	if cfg.IncludeCloudflare {
-		var domain string
-		_ = survey.AskOne(&survey.Input{
-			Message: "Domain for Cloudflare (optional, e.g., api.mydomain.com):",
-		}, &domain)
-		cfg.DomainName = strings.TrimSpace(domain)
+	// If Compute Engine was selected, ask for network exposure and idle shutdown
+	if cfg.IncludeComputeEngine {
+		var vmAccessChoice string
+		if err := survey.AskOne(&survey.Select{
+			Message: "Internet exposure for Compute Engine VM:",
+			Options: []string{
+				"Private (internal only, no external IP - Zero-Trust via IAP)",
+				"Public (ephemeral external IP for direct internet access)",
+			},
+			Default: "Private (internal only, no external IP - Zero-Trust via IAP)",
+			Help:    "Private VMs avoid external IP exposure and can be accessed securely via IAP tunnel",
+		}, &vmAccessChoice); err != nil {
+			return nil, err
+		}
+		cfg.VMPublicIP = strings.HasPrefix(vmAccessChoice, "Public")
+
+		enableIdleShutdown := false
+		if err := survey.AskOne(&survey.Confirm{
+			Message: "Enable automated idle shutdown for the VM? (powers off if CPU < 1% for 30 min)",
+			Default: true,
+			Help:    "Helps prevent accidental billing from runaway background tasks ($0 cost)",
+		}, &enableIdleShutdown); err != nil {
+			return nil, err
+		}
+		cfg.VMIdleShutdown = enableIdleShutdown
 	}
 
 	// AI integration paused for now

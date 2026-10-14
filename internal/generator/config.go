@@ -24,11 +24,11 @@ type ProjectConfig struct {
 	IncludeAuth            bool `json:"include_auth"`             // Identity Platform / Firebase Auth
 	EnableIdentityPlatform bool `json:"enable_identity_platform"` // Enables emulator and Identity Platform resources
 	IncludeSecrets         bool `json:"include_secrets"`          // Secret Manager
-
-	// Edge & Networking modules
-	IncludeCloudflare bool   `json:"include_cloudflare"`
-	CloudflareZoneID  string `json:"cloudflare_zone_id,omitempty"`
-	DomainName        string `json:"domain_name,omitempty"` // e.g.: "api.mydomain.com"
+	IncludeComputeEngine   bool `json:"include_compute_engine"`   // Free Tier Compute Engine VM (e2-micro, 30GB pd-standard)
+	VMPublicIP             bool `json:"vm_public_ip"`             // true = ephemeral public IP | false = internal only (Zero-Trust/IAP)
+	VMIdleShutdown         bool `json:"vm_idle_shutdown"`         // Shuts down VM after 30 mins of idle CPU (<1%)
+	IncludeBigQuery        bool `json:"include_bigquery"`         // BigQuery dataset capped with 60-day expiration (10GB limit)
+	IncludeCloudFunctions  bool `json:"include_cloud_functions"`  // Cloud Functions v2 (2M invocations/mo, scale to zero)
 
 	// Local Development & AI environment
 	IncludeLocalEmulators bool `json:"include_local_emulators"` // Generates docker-compose.yml
@@ -43,7 +43,12 @@ func NewDefaultConfig(projectName, projectID string) ProjectConfig {
 		Region:                "us-central1", // Default region for Always Free
 		IncludeStorage:        true,          // Recommended default
 		IncludeSecrets:        true,          // Recommended default
-		IncludeLocalEmulators: true,          // Generates docker-compose by default
+		IncludeComputeEngine:  false,
+		VMPublicIP:            false,
+		VMIdleShutdown:        false,
+		IncludeBigQuery:       false,
+		IncludeCloudFunctions: false,
+		IncludeLocalEmulators: true, // Generates docker-compose by default
 		EnableGemmaAssistant:  false,
 		Services:              []CloudRunService{},
 	}

@@ -27,6 +27,9 @@ English | [Español](README.es.md)
 * **Interactive Terminal Wizard:** Guided step-by-step CLI survey (built with `survey`) that captures configuration, microservices, and architectural modules in seconds.
 * **Guaranteed $0/Month (Always Free Defaults):** Defaults strictly locked to `us-central1`, 256Mi RAM per container, 1000m (1 vCPU), and scale-to-zero policy (`min_instance_count = 0`).
 * **Modular Infrastructure-as-Code (Terraform):** Produces clean, canonical Terraform files (`main.tf`, `compute.tf`, `modules.tf`, `variables.tf`, `outputs.tf`, `providers.tf`) validated with `terraform fmt`.
+* **Subcommand `cloud audit` for Cost Prevention:** Native static analysis engine that audits Terraform configuration files (.tf). Detects billing risks (non-`e2-micro` machines, disks larger than 30 GB or non-standard types, containers without scale-to-zero, missing BigQuery expiration) with `--strict` mode to fail CI/CD pipelines.
+* **CI/CD Automation & Headless Flags:** Automated pipeline execution via `--config config.json`, preview simulation with `--dry-run`, structured machine output via `--format json`, and custom destination directory with `--output-dir`.
+* **Extended Always Free Modules:** Out-of-the-box support for Compute Engine (`e2-micro` VM with private or public IP options and automated idle shutdown via Cloud Scheduler), BigQuery (partitioned datasets capped under 10 GB with 60-day auto-expiration), and Cloud Functions v2 with a 7-day storage zip lifecycle.
 * **Zero-Trust Identity & Least Privilege (IAM):** Decouples from default Compute Engine service accounts; provisions dedicated, least-privilege Service Accounts per Cloud Run service (`roles/datastore.user`, `roles/storage.objectUser`, `roles/secretmanager.secretAccessor`).
 * **Complete Local Emulator Suite (Docker Compose):** Instant offline environment via Firebase Emulator Suite (`make emulators-up`) emulating Firestore, Storage, Pub/Sub, and Auth with an interactive web UI at `http://localhost:4000`.
 * **Multi-Engine AI Security Auditor:** Built-in Zero-Trust audit engine supporting local, offline Ollama (`gemma:2b`), with automatic fallbacks to Google Gemini (`gemini-1.5-flash`), OpenAI (`gpt-4o-mini`), and graceful degradation if no AI backend is detected.
@@ -44,10 +47,9 @@ English | [Español](README.es.md)
 | **Cloud Pub/Sub** | Topics and Push Subscriptions with dedicated invoker Service Account | 10 GB message data transfer per month | ✅ Supported |
 | **Identity Platform / Auth** | Email/Password authentication & provider setup | Up to 50,000 Monthly Active Users (MAU) | ✅ Supported |
 | **Secret Manager** | Base application secret with automatic replication | 6 active secret versions, 10,000 access operations/month | ✅ Supported |
-| **Cloudflare DNS / SSL** | DNS records integration and SSL proxy for custom domains | Free Tier plan for custom domain management | ✅ Supported |
-| **Compute Engine (VM e2-micro)** | e2-micro instance (1 vCPU, 1 GB RAM, 30 GB standard persistent disk) | 1 non-preemptible e2-micro instance/mo (744 continuous hours in US) | 🚧 In Roadmap |
-| **BigQuery** | Analytical queries and active table storage | 1 TB SQL queries processed/mo, 10 GB active storage | 🚧 In Roadmap |
-| **Cloud Functions (2nd Gen)** | Event-driven invocations and serverless compute time | 2M invocations/mo, 400,000 GB-seconds | 🚧 In Roadmap |
+| **Compute Engine (VM e2-micro)** | e2-micro instance (1 vCPU, 1 GB RAM, 30 GB standard persistent disk) | 1 non-preemptible e2-micro instance/mo (744 continuous hours in US) | ✅ Supported |
+| **BigQuery** | Analytical queries and active table storage | 1 TB SQL queries processed/mo, 10 GB active storage | ✅ Supported |
+| **Cloud Functions (2nd Gen)** | Event-driven invocations and serverless compute time | 2M invocations/mo, 400,000 GB-seconds | ✅ Supported |
 | **Cloud Monitoring & Budgets** | Real-time quota and cost tracking via GCP Billing API | Automated budget alert rules at 50%, 80%, and 100% thresholds | 🚧 In Roadmap |
 
 ---
@@ -101,6 +103,24 @@ The primary CLI command is **`cloud`** (with the alias **`init`**).
 
 # View command description and flags
 ./bin/cloud --help
+
+# Dry-run mode: Validate configuration without writing files to disk
+./bin/cloud --dry-run
+
+# Headless CI/CD mode with JSON configuration file and clean JSON output
+./bin/cloud --config project.json --format json --dry-run
+
+# Specify custom target output directory (default: infra)
+./bin/cloud --config project.json --output-dir ./my-infra
+
+# Audit existing Terraform infrastructure against Always Free limits
+./bin/cloud audit infra
+
+# Audit with JSON report and strict mode for automated CI/CD gates
+./bin/cloud audit infra --format json --strict
+
+# Audit with Zero-Trust AI security recommendations
+./bin/cloud audit infra --with-ai
 ```
 
 ### Wizard Workflow
@@ -124,7 +144,9 @@ Running the command starts an interactive prompt covering three sequential steps
      * `IncludeStorage`: Private Cloud Storage bucket with versioning and public access prevention.
      * `IncludeFirestore`: Cloud Firestore NoSQL database in Native Mode.
      * `IncludeAuth`: Identity Platform / Firebase Auth.
-     * `IncludeCloudflare`: Cloudflare DNS & SSL proxy (prompts for custom domain).
+     * `IncludeComputeEngine`: Always Free e2-micro VM instance (30GB pd-standard, prompts for private vs public IP and idle shutdown).
+     * `IncludeBigQuery`: BigQuery dataset and partitioned event table with 60-day retention to strictly cap storage under 10 GB.
+     * `IncludeCloudFunctions`: Cloud Functions v2 with scale-to-zero and 7-day source zip auto-purge on GCS bucket.
      * `IncludeLocalEmulators`: Offline Docker Compose suite with Firebase emulators.
 
 ### Generated Output
@@ -153,7 +175,11 @@ Once completed, the CLI prints the validated configuration in formatted **JSON**
   "include_auth": true,
   "enable_identity_platform": true,
   "include_secrets": true,
-  "include_cloudflare": false,
+  "include_compute_engine": false,
+  "vm_public_ip": false,
+  "vm_idle_shutdown": false,
+  "include_bigquery": false,
+  "include_cloud_functions": false,
   "include_local_emulators": true,
   "enable_gemma_assistant": false
 }
@@ -164,11 +190,11 @@ Generated file structure in `./infra`:
 ```
 infra/
 ├── Makefile              # Terraform and Docker shortcuts
-├── compute.tf            # Cloud Run services & dedicated Service Accounts
+├── compute.tf            # Cloud Run services, Compute Engine VM, Cloud Functions v2 & Service Accounts
 ├── main.tf               # Required GCP API enablement
-├── modules.tf            # Storage, Firestore, Auth, and Secret Manager
+├── modules.tf            # Storage, Firestore, Auth, BigQuery, and Secret Manager
 ├── outputs.tf            # Service URLs, bucket names, and resource identifiers
-├── providers.tf          # Google Cloud and Cloudflare provider declarations
+├── providers.tf          # Google Cloud provider declarations
 ├── variables.tf          # Project ID and regional variables
 ├── docker-compose.yml    # (Optional) Firebase Emulator Suite container definition
 ├── firebase.json         # (Optional) Emulator ports and rules bindings
@@ -255,25 +281,59 @@ The codebase embeds an intelligent security auditor in `internal/ai` that analyz
 
 ---
 
+### Static Cost & Compliance Audit (`cloud audit`)
+
+The standalone **`cloud audit`** subcommand performs rule-based static analysis directly over any directory containing Terraform (`.tf`) files to ensure that all infrastructure resources strictly comply with Google Cloud's Always Free tier ($0/month):
+
+#### Strict Rule Enforcement:
+* **Compute Engine:** Validates machine type is `e2-micro`, boot disk type is `pd-standard` (`pd-ssd` incurs billing), and boot disk size is $\le$ 30 GB.
+* **Cloud Run:** Validates container memory allocation is $\le$ 256Mi and enforces scale-to-zero (`min_instance_count = 0`).
+* **Cloud Storage:** Validates public access prevention is `enforced` and uniform bucket-level access is enabled.
+* **BigQuery:** Validates the presence of automatic table expiration (`default_table_expiration_ms`) to ensure active data storage remains well under the 10 GB Always Free ceiling.
+* **Always Free Eligible Regions:** Validates that resources are deployed within free-tier eligible US regions (`us-central1`, `us-east1`, `us-west1`).
+* **Zero-Trust IAM:** Verifies that compute services use dedicated, least-privilege Service Accounts rather than the permissive default Compute Engine SA.
+
+#### Supported Flags:
+* `-d, --dir <path>`: Directory containing `.tf` files to audit (default: `infra`).
+* `-f, --format text|json`: Terminal-friendly report or raw JSON for programmatic inspection in automated pipelines.
+* `--strict`: Exits with code `1` upon detecting any cost violation (`FAIL`), ideal for blocking non-compliant Pull Requests in CI/CD.
+* `--with-ai`: Invokes the local or cloud LLM provider to enrich findings with Zero-Trust architectural security recommendations.
+
+#### Audit Usage Examples:
+
+```bash
+# Standard local audit
+./bin/cloud audit infra
+
+# Strict CI/CD quality gate (GitHub Actions / GitLab CI)
+./bin/cloud audit infra --format json --strict
+
+# Combined audit: Always Free cost rules + AI-powered Zero-Trust suggestions
+./bin/cloud audit infra --with-ai
+```
+
+---
+
 ## 🗺️ Roadmap
 
-Planned features for upcoming releases:
+Status of planned features across release cycles:
 
 - [ ] **Active Real-Time Monitoring Subcommands:**
-  - `cloud status` / `gcp-freetier status`: Live inspection of monthly quota consumption against Always Free thresholds via Cloud Monitoring API and Cloud Billing API.
-  - `cloud audit` / `gcp-freetier audit`: Standalone command to run security and cost audits over existing Terraform directories.
-- [ ] **CLI Output Formatting Flags:**
-  - Support for `--format json` and `--format text` for CI/CD automated gates.
-  - Support for `--dry-run` to preview configuration without writing to disk.
-- [ ] **Extended Always Free Service Coverage:**
-  - Compute Engine module: `e2-micro` VM in `us-central1` with automated idle shutdown.
-  - BigQuery module: Partitioned datasets capped within the 10 GB limit.
-  - Cloud Functions v2 module.
+  - [ ] `cloud status` / `gcp-freetier status`: Live inspection of monthly quota consumption against Always Free thresholds via Cloud Monitoring API and Cloud Billing API.
+  - [x] `cloud audit` / `gcp-freetier audit`: Standalone command to run security and cost audits over existing Terraform directories.
+- [x] **CLI Output Formatting & Automation Flags:**
+  - [x] Support for `--format json` and `--format text` for CI/CD automated gates.
+  - [x] Support for `--dry-run` to preview configuration without writing to disk.
+  - [x] Headless mode via `-c, --config` and configurable destination via `-o, --output-dir`.
+- [x] **Extended Always Free Service Coverage:**
+  - [x] Compute Engine module: `e2-micro` VM in `us-central1` (public or private IP) with automated idle shutdown.
+  - [x] BigQuery module: Partitioned datasets capped within the 10 GB limit with 60-day auto-retention.
+  - [x] Cloud Functions v2 module: Scale-to-zero and 7-day source zip auto-purge.
 - [ ] **Proactive Billing Guardrails:**
-  - Webhook alerts for Slack, Discord, and Email triggered when reaching 80% of free limits.
+  - [ ] Webhook alerts for Slack, Discord, and Email triggered when reaching 80% of free limits.
 - [ ] **Cross-Platform Distribution:**
-  - Precompiled binaries for Linux, macOS, and Windows via GitHub Releases (GoReleaser).
-  - Homebrew Tap distribution (`brew install alexg695/tap/cloud`).
+  - [ ] Precompiled binaries for Linux, macOS, and Windows via GitHub Releases (GoReleaser).
+  - [ ] Homebrew Tap distribution (`brew install alexg695/tap/cloud`).
 
 ---
 

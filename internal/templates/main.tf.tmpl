@@ -12,6 +12,9 @@ locals {
 {{- if .HasPubSub }}
     "pubsub.googleapis.com",
 {{- end }}
+{{- if .IncludeComputeEngine }}
+    "compute.googleapis.com",
+{{- end }}
 {{- if .IncludeStorage }}
     "storage.googleapis.com",
 {{- end }}
@@ -20,6 +23,14 @@ locals {
 {{- end }}
 {{- if .IncludeSecrets }}
     "secretmanager.googleapis.com",
+{{- end }}
+{{- if .IncludeBigQuery }}
+    "bigquery.googleapis.com",
+{{- end }}
+{{- if .IncludeCloudFunctions }}
+    "cloudfunctions.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "artifactregistry.googleapis.com",
 {{- end }}
 {{- if or .IncludeAuth .EnableIdentityPlatform }}
     "identitytoolkit.googleapis.com",

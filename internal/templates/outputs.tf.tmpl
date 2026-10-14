@@ -52,3 +52,56 @@ output "secret_manager_secret_id" {
   value       = google_secret_manager_secret.app_secret.secret_id
 }
 {{ end }}
+
+{{ if .IncludeComputeEngine }}
+output "vm_instance_name" {
+  description = "Compute Engine Free Tier instance name"
+  value       = google_compute_instance.vm_instance.name
+}
+
+output "vm_instance_zone" {
+  description = "Compute Engine instance zone"
+  value       = google_compute_instance.vm_instance.zone
+}
+
+output "vm_service_account" {
+  description = "Dedicated Service Account email for Compute Engine VM"
+  value       = google_service_account.vm_sa.email
+}
+
+{{ if .VMPublicIP }}
+output "vm_public_ip" {
+  description = "Ephemeral public IP of the Compute Engine VM"
+  value       = google_compute_instance.vm_instance.network_interface[0].access_config[0].nat_ip
+}
+{{ else }}
+output "vm_private_ip" {
+  description = "Internal private IP of the Compute Engine VM"
+  value       = google_compute_instance.vm_instance.network_interface[0].network_ip
+}
+{{ end }}
+{{ end }}
+
+{{ if .IncludeBigQuery }}
+output "bigquery_dataset_id" {
+  description = "BigQuery dataset ID"
+  value       = google_bigquery_dataset.analytics_dataset.dataset_id
+}
+
+output "bigquery_events_table_id" {
+  description = "BigQuery partitioned events table ID"
+  value       = google_bigquery_table.events_table.table_id
+}
+{{ end }}
+
+{{ if .IncludeCloudFunctions }}
+output "cloud_function_name" {
+  description = "Cloud Function v2 name"
+  value       = google_cloudfunctions2_function.app_function.name
+}
+
+output "cloud_function_uri" {
+  description = "Cloud Function v2 invoke URI"
+  value       = google_cloudfunctions2_function.app_function.service_config[0].uri
+}
+{{ end }}
